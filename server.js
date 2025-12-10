@@ -1,13 +1,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost/test', {
+mongoose.connect(process.env.MONGODB_URI, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 })
@@ -24,6 +25,24 @@ const licenseSchema = new mongoose.Schema({
 });
 
 const License = mongoose.model('License', licenseSchema);
+
+// ========== ROUTES ==========
+
+// Root route - shows API info
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Roblox License Server API',
+        status: 'online',
+        endpoints: {
+            health: '/health (GET)',
+            createKey: '/api/create-key (POST - requires x-api-key header)',
+            activate: '/api/activate (POST)',
+            validate: '/api/validate (POST)'
+        },
+        adminKey: 'Use: DID_MASSIVE_ADMIN_KEY_2025_8E7D6C5B4A3928F1',
+        timestamp: new Date().toISOString()
+    });
+});
 
 // Health check
 app.get('/health', (req, res) => {
@@ -55,6 +74,10 @@ app.post('/api/create-key', async (req, res) => {
             return res.status(401).json({ error: 'Unauthorized' });
         }
         
+        if (!scriptId) {
+            return res.status(400).json({ error: 'Missing scriptId' });
+        }
+        
         const key = generateKey();
         const newLicense = new License({
             key,
@@ -66,7 +89,8 @@ app.post('/api/create-key', async (req, res) => {
         res.json({
             success: true,
             key,
-            scriptId
+            scriptId,
+            message: 'License key created successfully'
         });
     } catch (error) {
         console.error('Error:', error);
@@ -86,11 +110,11 @@ app.post('/api/activate', async (req, res) => {
         const license = await License.findOne({ key });
         
         if (!license) {
-            return res.status(404).json({ error: 'Invalid key' });
+            return res.status(404).json({ error: 'Invalid license key' });
         }
         
         if (license.activated) {
-            return res.status(400).json({ error: 'Already activated' });
+            return res.status(400).json({ error: 'License already activated' });
         }
         
         license.userId = userId;
@@ -101,7 +125,9 @@ app.post('/api/activate', async (req, res) => {
         
         res.json({
             success: true,
-            message: 'Activated!'
+            message: 'License activated successfully',
+            scriptId: license.scriptId,
+            activationDate: license.activationDate
         });
     } catch (error) {
         console.error('Error:', error);
@@ -113,6 +139,10 @@ app.post('/api/activate', async (req, res) => {
 app.post('/api/validate', async (req, res) => {
     try {
         const { userId, scriptId } = req.body;
+        
+        if (!userId || !scriptId) {
+            return res.status(400).json({ error: 'Missing userId or scriptId' });
+        }
         
         const license = await License.findOne({
             userId: userId,
@@ -133,5 +163,5 @@ app.post('/api/validate', async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🚀 License server running on port ${PORT}`);
 });
